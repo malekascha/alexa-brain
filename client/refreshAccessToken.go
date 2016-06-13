@@ -36,7 +36,7 @@ func retrieveAuthEnvVars() AuthEnvVars {
 }
 
 func fetchRefreshToken() string {
-  data, err := ioutil.ReadFile("token.json")
+  data, err := ioutil.ReadFile("../token.json")
   var auth_response AuthResponse
 
   err = json.Unmarshal(data, &auth_response)
@@ -85,7 +85,7 @@ func retrieveAuthToken() []byte {
 func main() {
     auth := retrieveAuthToken()
     fmt.Println(string(auth))
-    err := ioutil.WriteFile("token.json", auth, 0644)
+    err := ioutil.WriteFile("../token.json", auth, 0644)
     if(err != nil){
       panic(err)
     }

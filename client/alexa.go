@@ -6,6 +6,8 @@ import (
     // "net/url"
     "io/ioutil"
     "encoding/json"
+    "os"
+    "os/exec"
 )
 
 type AuthResponse struct {
@@ -15,11 +17,69 @@ type AuthResponse struct {
   Expires_in int `json:"expires_in"`
 }
 
+type Context struct {
+  context []interface{}
+  event map[string]interface{}
+}
+
+type ContextHeader struct {
+  namespace string
+  name string
+}
+
+type AudioPlayerPayload struct {
+  token string
+  offsetInMilliseconds string
+  playerActivity string
+}
+
+type Alert struct {
+  token string
+  type string
+  scheduledTime string
+}
+
+type AlertsPayload struct {
+  allAlerts []Alert
+  activeAlerts []Alert
+}
+
+type SpeakerPayload struct {
+  volume int
+  muted bool
+}
+
+type SpeechSynthesizerPayload struct {
+  token string
+  offsetInMilliseconds string
+  playerActivity string
+}
+
+func generateUUID() []uint8 {
+  id, err := exec.Command("uuidgen").Output()
+  if(err != nil) {
+    panic(err)
+  }
+  return id
+}
+
+func setAuthEnvVars() {
+  data, err := ioutil.ReadFile("../token.json")
+  if(err != nil){
+    panic(err)
+  }
+  str := string(data[:])
+  err = os.Setenv("auth", str)
+  if(err != nil){
+    panic(err)
+  }
+}
 
 func fetchAccessToken() string {
-  data, err := ioutil.ReadFile("token.json")
+  auth_info_string := os.Getenv("auth")
+  auth_info := []byte(auth_info_string)
   var auth_response AuthResponse
-  err = json.Unmarshal(data, &auth_response)
+  err := json.Unmarshal(auth_info, &auth_response)
   if(err != nil){
     panic(err)
   }
@@ -40,12 +100,50 @@ func initDownchannel() {
     panic(err)
   }
   contents, err := ioutil.ReadAll(res.Body)
+  fmt.Println(contents)
   if(err != nil){
     panic(err)
   }
-  \
+  
+}
+
+// func initDeviceContext() string {
+//   context := {
+//     ""
+//   }
+// }
+
+func synchronizeInitialState() {
+  id := generateUUID()
+  context := Context{
+    {
+     ContextHeader{
+      "Audioplayer",
+      "PlaybackState"
+     } ,
+     interface{}
+    },
+    {
+      ContextHeader{
+        "Alerts",
+        "AlertsState"
+      },
+      AlertsPayload{
+        {},
+        {}
+      }
+    },
+    {
+      ContextHeader{
+        "Speaker",
+        "VolumeState"
+      },
+      
+    }
+  }
 }
 
 func main() {
+  setAuthEnvVars()
   initDownchannel()
 }
