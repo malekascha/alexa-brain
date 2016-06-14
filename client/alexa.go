@@ -8,7 +8,10 @@ import (
     "encoding/json"
     "os"
     "os/exec"
+    "strconv"
 )
+
+//STRUCTS//////////////////////////////////////////////////////////
 
 type AuthResponse struct {
   Token_type string `json:"token_type"`
@@ -17,51 +20,57 @@ type AuthResponse struct {
   Expires_in int `json:"expires_in"`
 }
 
-type Context struct {
-  context []interface{}
-  event map[string]interface{}
+type EventRequestBody struct {
+  context []interface{} `json:"context"`
+  event interface{} `json:"event"`
+}
+
+type Event struct {
+  header interface{} `json:"header"`
+  payload interface{} `json:"payload"`
+}
+
+type EventHeaders struct {
+  namespace string `json:"namespace"`
+  name string `json:"name"`
+  messageId string `json:"messageId"`
 }
 
 type ContextHeader struct {
-  namespace string
-  name string
+  namespace string `json:"namespace"`
+  name string `json:"name"`
 }
 
 type AudioPlayerPayload struct {
-  token string
-  offsetInMilliseconds string
-  playerActivity string
+  token string `json:"token"`
+  offsetInMilliseconds string `json:"offsetInMilliseconds"`
+  playerActivity string `json:"playerActivity"`
 }
 
 type Alert struct {
-  token string
-  type string
-  scheduledTime string
+  token string `json:"token"`
+  // type string
+  scheduledTime string `json:"scheduledTime"`
 }
 
 type AlertsPayload struct {
-  allAlerts []Alert
-  activeAlerts []Alert
+  allAlerts []Alert `json:"allAlerts"`
+  activeAlerts []Alert `json:"activeAlerts"`
 }
 
 type SpeakerPayload struct {
-  volume int
-  muted bool
+  volume int `json:"volume"`
+  muted bool `json:"muted"`
 }
 
 type SpeechSynthesizerPayload struct {
-  token string
-  offsetInMilliseconds string
-  playerActivity string
+  token string `json:"token"`
+  offsetInMilliseconds string `json:"offsetInMilliseconds"`
+  playerActivity string `json:"playerActivity"`
 }
 
-func generateUUID() []uint8 {
-  id, err := exec.Command("uuidgen").Output()
-  if(err != nil) {
-    panic(err)
-  }
-  return id
-}
+
+//AUTH FUNCTIONS/////////////////////////////////////////////
 
 func setAuthEnvVars() {
   data, err := ioutil.ReadFile("../token.json")
@@ -86,9 +95,34 @@ func fetchAccessToken() string {
   return auth_response.Access_token
 }
 
+//UTILITY FUNCTIONS/////////////////////////////////////////////////
+
+func generateUUID() string {
+  id, err := exec.Command("uuidgen").Output()
+  if(err != nil) {
+    panic(err)
+  }
+  return string(id)
+}
+
+func getVolume() int {
+  out, err := exec.Command("/bin/sh", "./scripts/getVolume.sh").Output()
+  if(err != nil) {
+    panic(err)
+  }
+  vol := string(out)[0:2]
+  percent, err := strconv.Atoi(vol)
+  if(err != nil) {
+    panic(err)
+  }
+  return percent
+}
+
+//ALEXA API CALLS////////////////////////////////////////////////////
+
 func initDownchannel() {
-  api_endpoint := "https://avs-alexa-na.amazon.com/v1/directives"
-  access_token := fetchAccessToken() //retrieves token from local file
+  api_endpoint := "https://avs-alexa-na.amazon.com/v20160207/directives"
+  access_token := fetchAccessToken()
   req, err := http.NewRequest("GET", api_endpoint, nil)
   if(err != nil){
     panic(err)
@@ -100,50 +134,43 @@ func initDownchannel() {
     panic(err)
   }
   contents, err := ioutil.ReadAll(res.Body)
-  fmt.Println(contents)
+  fmt.Println(string(contents))
   if(err != nil){
     panic(err)
   }
   
 }
 
-// func initDeviceContext() string {
-//   context := {
-//     ""
-//   }
-// }
-
 func synchronizeInitialState() {
   id := generateUUID()
-  context := Context{
-    {
-     ContextHeader{
-      "Audioplayer",
-      "PlaybackState"
-     } ,
-     interface{}
-    },
-    {
-      ContextHeader{
-        "Alerts",
-        "AlertsState"
-      },
-      AlertsPayload{
-        {},
-        {}
-      }
-    },
-    {
-      ContextHeader{
-        "Speaker",
-        "VolumeState"
-      },
-      
-    }
+  volume := getVolume()
+  audioHeader := ContextHeader{"Audioplayer", "PlaybackState"}
+  alertsHeader := ContextHeader{"Alerts","AlertsState"}
+  speakerHeader := ContextHeader{"Speaker","VolumeState"}
+  speechSynthesizerHeader := ContextHeader{"SpeechSynthesizer","SpeechState"}
+  audioContext := Event{audioHeader, AudioPlayerPayload{}}
+  alertsContext := Event{alertsHeader, AlertsPayload{}}
+  speakerContext := Event{speakerHeader, SpeakerPayload{volume,false}} //TODO: actually check mute status of system
+  speechSynthesizerContext := Event{speechSynthesizerHeader, SpeechSynthesizerPayload{}}
+  context := []interface{}{audioContext,alertsContext,speakerContext,speechSynthesizerContext}
+  eventHeaders := EventHeaders{"System","SynchronizeState",id}
+  event := Event{eventHeaders, nil}
+  body := EventRequestBody{context,event}
+  fmt.Println(body.context[1:])
+  encoded_body, err := json.Marshal(body)
+  if(err != nil){
+    panic(err)
   }
+  fmt.Println(string(encoded_body))
+  // var m interface{}
+  // _ = json.Unmarshal(encoded_body, m)
+  // fmt.Println(m)
 }
+
+//MAIN///////////////////////////////////////////////
 
 func main() {
   setAuthEnvVars()
-  initDownchannel()
+  // initDownchannel()
+  synchronizeInitialState()
 }
