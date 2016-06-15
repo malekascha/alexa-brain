@@ -21,52 +21,52 @@ type AuthResponse struct {
 }
 
 type EventRequestBody struct {
-  context []interface{} `json:"context"`
-  event interface{} `json:"event"`
+  Context []interface{} `json:"context"`
+  Event interface{} `json:"event"`
 }
 
 type Event struct {
-  header interface{} `json:"header"`
-  payload interface{} `json:"payload"`
+  Header interface{} `json:"header"`
+  Payload interface{} `json:"payload"`
 }
 
 type EventHeaders struct {
-  namespace string `json:"namespace"`
-  name string `json:"name"`
-  messageId string `json:"messageId"`
+  Namespace string `json:"namespace"`
+  Name string `json:"name"`
+  MessageId string `json:"messageId"`
 }
 
 type ContextHeader struct {
-  namespace string `json:"namespace"`
-  name string `json:"name"`
+  Namespace string `json:"namespace"`
+  Name string `json:"name"`
 }
 
 type AudioPlayerPayload struct {
-  token string `json:"token"`
-  offsetInMilliseconds string `json:"offsetInMilliseconds"`
-  playerActivity string `json:"playerActivity"`
+  Token string `json:"token"`
+  OffsetInMilliseconds string `json:"offsetInMilliseconds"`
+  PlayerActivity string `json:"playerActivity"`
 }
 
 type Alert struct {
-  token string `json:"token"`
-  // type string
-  scheduledTime string `json:"scheduledTime"`
+  Token string `json:"token"`
+  Type string `json:"type"`
+  ScheduledTime string `json:"scheduledTime"`
 }
 
 type AlertsPayload struct {
-  allAlerts []Alert `json:"allAlerts"`
-  activeAlerts []Alert `json:"activeAlerts"`
+  AllAlerts []Alert `json:"allAlerts"`
+  ActiveAlerts []Alert `json:"activeAlerts"`
 }
 
 type SpeakerPayload struct {
-  volume int `json:"volume"`
-  muted bool `json:"muted"`
+  Volume int `json:"volume"`
+  Muted bool `json:"muted"`
 }
 
 type SpeechSynthesizerPayload struct {
-  token string `json:"token"`
-  offsetInMilliseconds string `json:"offsetInMilliseconds"`
-  playerActivity string `json:"playerActivity"`
+  Token string `json:"token"`
+  OffsetInMilliseconds string `json:"offsetInMilliseconds"`
+  PlayerActivity string `json:"playerActivity"`
 }
 
 
@@ -118,6 +118,14 @@ func getVolume() int {
   return percent
 }
 
+func initAgnosticSlice() []interface{} {
+  return make([]interface{},0)
+}
+
+func initAlertSlice() []Alert {
+  return make([]Alert,0)
+}
+
 //ALEXA API CALLS////////////////////////////////////////////////////
 
 func initDownchannel() {
@@ -141,7 +149,7 @@ func initDownchannel() {
   
 }
 
-func synchronizeInitialState() {
+func createInitialContext() []byte {
   id := generateUUID()
   volume := getVolume()
   audioHeader := ContextHeader{"Audioplayer", "PlaybackState"}
@@ -149,22 +157,26 @@ func synchronizeInitialState() {
   speakerHeader := ContextHeader{"Speaker","VolumeState"}
   speechSynthesizerHeader := ContextHeader{"SpeechSynthesizer","SpeechState"}
   audioContext := Event{audioHeader, AudioPlayerPayload{}}
-  alertsContext := Event{alertsHeader, AlertsPayload{}}
+  alertsContext := Event{alertsHeader, AlertsPayload{initAlertSlice(),initAlertSlice()}}
   speakerContext := Event{speakerHeader, SpeakerPayload{volume,false}} //TODO: actually check mute status of system
   speechSynthesizerContext := Event{speechSynthesizerHeader, SpeechSynthesizerPayload{}}
   context := []interface{}{audioContext,alertsContext,speakerContext,speechSynthesizerContext}
   eventHeaders := EventHeaders{"System","SynchronizeState",id}
-  event := Event{eventHeaders, nil}
+  event := Event{eventHeaders, initAgnosticSlice()}
   body := EventRequestBody{context,event}
-  fmt.Println(body.context[1:])
+
   encoded_body, err := json.Marshal(body)
   if(err != nil){
     panic(err)
   }
-  fmt.Println(string(encoded_body))
-  // var m interface{}
-  // _ = json.Unmarshal(encoded_body, m)
-  // fmt.Println(m)
+  
+  return encoded_body
+}
+
+func synchronizeInitialState() {
+  
+  
+  
 }
 
 //MAIN///////////////////////////////////////////////
