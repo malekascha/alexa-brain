@@ -3,12 +3,15 @@ package main
 import (
     "fmt"
     "net/http"
+    "net/http/httputil"
     // "net/url"
     "io/ioutil"
     "encoding/json"
     "os"
     "os/exec"
     "strconv"
+    "bytes"
+    "mime/multipart"
 )
 
 //STRUCTS//////////////////////////////////////////////////////////
@@ -69,6 +72,9 @@ type SpeechSynthesizerPayload struct {
   PlayerActivity string `json:"playerActivity"`
 }
 
+type Empty struct {
+
+}
 
 //AUTH FUNCTIONS/////////////////////////////////////////////
 
@@ -106,11 +112,16 @@ func generateUUID() string {
 }
 
 func getVolume() int {
-  out, err := exec.Command("/bin/sh", "./scripts/getVolume.sh").Output()
+  vol_string, err := exec.Command("/bin/sh", "./scripts/getVolume.sh").Output()
   if(err != nil) {
     panic(err)
   }
-  vol := string(out)[0:2]
+  var vol string
+  if(len(vol_string) > 2){
+    vol = string(vol_string)[:2]
+  } else {
+    vol = string(vol_string)[:1]
+  }
   percent, err := strconv.Atoi(vol)
   if(err != nil) {
     panic(err)
@@ -137,11 +148,14 @@ func initDownchannel() {
   }
   req.Header.Add("authorization", fmt.Sprintf("Bearer %s", access_token))
   client := &http.Client{}
+  fmt.Println("sending request")
   res, err := client.Do(req)
+  fmt.Println("request sent")
   if(err != nil){
     panic(err)
   }
   contents, err := ioutil.ReadAll(res.Body)
+  fmt.Println("body read, printing results")
   fmt.Println(string(contents))
   if(err != nil){
     panic(err)
@@ -149,40 +163,68 @@ func initDownchannel() {
   
 }
 
-func createInitialContext() []byte {
-  id := generateUUID()
+func createInitialContext() []interface{} {
   volume := getVolume()
-  audioHeader := ContextHeader{"Audioplayer", "PlaybackState"}
+  audioHeader := ContextHeader{"AudioPlayer", "PlaybackState"}
   alertsHeader := ContextHeader{"Alerts","AlertsState"}
   speakerHeader := ContextHeader{"Speaker","VolumeState"}
   speechSynthesizerHeader := ContextHeader{"SpeechSynthesizer","SpeechState"}
-  audioContext := Event{audioHeader, AudioPlayerPayload{}}
+  audioContext := Event{audioHeader, AudioPlayerPayload{"", "", "IDLE"}}
   alertsContext := Event{alertsHeader, AlertsPayload{initAlertSlice(),initAlertSlice()}}
   speakerContext := Event{speakerHeader, SpeakerPayload{volume,false}} //TODO: actually check mute status of system
   speechSynthesizerContext := Event{speechSynthesizerHeader, SpeechSynthesizerPayload{}}
   context := []interface{}{audioContext,alertsContext,speakerContext,speechSynthesizerContext}
-  eventHeaders := EventHeaders{"System","SynchronizeState",id}
-  event := Event{eventHeaders, initAgnosticSlice()}
-  body := EventRequestBody{context,event}
+  return context
+}
 
+func createInitialStateEvent() Event {
+  id := generateUUID()
+  eventHeaders := EventHeaders{"System","SynchronizeState",id}
+  event := Event{eventHeaders, Empty{}}
+  return event
+}
+
+func createInitialJSON() []byte {
+  body := EventRequestBody{createInitialContext(),createInitialStateEvent()}
   encoded_body, err := json.Marshal(body)
   if(err != nil){
     panic(err)
   }
-  
   return encoded_body
 }
 
 func synchronizeInitialState() {
-  
-  
-  
+  api_endpoint := "https://avs-alexa-na.amazon.com/v20160207/events"
+  access_token := fetchAccessToken()
+
+  body := &bytes.Buffer{}
+  writer := multipart.NewWriter(body)
+  part, err := writer.CreateFormField("metadata\r\nContent-Type: application/json; charset=UTF-8")
+  JSON := createInitialJSON()
+  part.Write(JSON)
+  writer.Close()
+  req, err := http.NewRequest("POST", api_endpoint, body)
+  if(err != nil){
+    panic(err)
+  }
+  client := &http.Client{}
+  req.Header.Add("authorization", fmt.Sprintf("Bearer %s", access_token))
+  req.Header.Add("Content-Type", fmt.Sprintf("multipart/form-data; boundary=%s", writer.Boundary()))
+  dump, err := httputil.DumpRequestOut(req,true)
+  fmt.Printf("%q\n\n", dump)
+  res, err := client.Do(req)
+  if(err != nil){
+    panic(err)
+  }
+  defer res.Body.Close()
+  res_body, err := ioutil.ReadAll(res.Body)
+  fmt.Println(string(res_body))
 }
 
 //MAIN///////////////////////////////////////////////
 
 func main() {
   setAuthEnvVars()
-  // initDownchannel()
+  go initDownchannel()
   synchronizeInitialState()
 }
